@@ -1,0 +1,129 @@
+import datetime
+
+TIPOS_CONTA = {
+    "corrente": {"tarifa_saque": 2.50, "limite_saques": 3},
+    "poupanca": {"tarifa_saque": 0.00, "limite_saques": 2}
+}
+
+usuarios = {
+    "joao": {
+        "nome": "João Silva",
+        "contas": {
+            "corrente": {"saldo": 1000.0, "extrato": [], "saques_hoje": 0, "data_hoje": datetime.date.today()},
+            "poupanca": {"saldo": 500.0, "extrato": [], "saques_hoje": 0, "data_hoje": datetime.date.today()}
+        }
+    }
+}
+
+def registrar_transacao(conta, descricao):
+    conta["extrato"].append(f"{datetime.datetime.now()} - {descricao}")
+
+def atualizar_data_saque(conta):
+    if conta["data_hoje"] != datetime.date.today():
+        conta["saques_hoje"] = 0
+        conta["data_hoje"] = datetime.date.today()
+
+def depositar(conta, valor):
+    if valor > 0:
+        conta["saldo"] += valor
+        registrar_transacao(conta, f"Depósito: +R$ {valor:.2f}")
+        return True, "Depósito realizado com sucesso."
+    return False, "Valor inválido."
+
+def sacar(conta, valor, tipo):
+    atualizar_data_saque(conta)
+    config = TIPOS_CONTA[tipo]
+    tarifa = config["tarifa_saque"]
+
+    if conta["saques_hoje"] >= config["limite_saques"]:
+        return False, "Limite diário de saques atingido."
+    if valor <= 0:
+        return False, "Valor inválido para saque."
+    if valor + tarifa > conta["saldo"]:
+        return False, "Saldo insuficiente para saque + tarifa."
+
+    conta["saldo"] -= (valor + tarifa)
+    conta["saques_hoje"] += 1
+    registrar_transacao(conta, f"Saque: -R$ {valor:.2f} (Tarifa R$ {tarifa:.2f})")
+    return True, "Saque realizado com sucesso."
+
+def ver_extrato(conta, tipo):
+    print(f"\n=== EXTRATO - CONTA {tipo.upper()} ===")
+    for transacao in conta["extrato"]:
+        print(transacao)
+    print(f"Saldo atual: R$ {conta['saldo']:.2f}")
+    print("===============================\n")
+
+def emprestimo(conta, tipo):
+    limite = conta["saldo"] * 2
+    print(f"\nVocê pode solicitar até R$ {limite:.2f} de empréstimo.")
+    valor = float(input("Digite o valor desejado: R$ "))
+
+    if 0 < valor <= limite:
+        juros = valor * 0.1  # 10% de juros simples
+        conta["saldo"] += valor
+        registrar_transacao(conta, f"Empréstimo: +R$ {valor:.2f} (Juros futuros: R$ {juros:.2f})")
+        print(f"Empréstimo aprovado! Valor: R$ {valor:.2f}, juros: R$ {juros:.2f}")
+    else:
+        print("Valor inválido ou acima do limite.")
+
+def escolher_usuario():
+    nome = input("Digite o nome do usuário (ex: joao): ").lower()
+    if nome in usuarios:
+        return nome
+    print("Usuário não encontrado.")
+    return None
+
+def escolher_conta(usuario):
+    contas = usuarios[usuario]["contas"]
+    print("\nContas disponíveis:")
+    for tipo in contas:
+        print(f"- {tipo}")
+    tipo = input("Escolha o tipo de conta: ").lower()
+    if tipo in contas:
+        return tipo
+    print("Tipo de conta inválido.")
+    return None
+
+def menu():
+    while True:
+        usuario = escolher_usuario()
+        if not usuario:
+            continue
+
+        tipo = escolher_conta(usuario)
+        if not tipo:
+            continue
+
+        conta = usuarios[usuario]["contas"][tipo]
+
+        while True:
+            print(f"\n--- MENU ({tipo.upper()} de {usuarios[usuario]['nome']}) ---")
+            print("1 - Depositar")
+            print("2 - Sacar")
+            print("3 - Ver Extrato")
+            print("4 - Solicitar Empréstimo")
+            print("5 - Trocar Conta")
+            print("0 - Sair")
+            opcao = input("Escolha: ")
+
+            if opcao == '1':
+                valor = float(input("Valor para depósito: R$ "))
+                print(depositar(conta, valor)[1])
+            elif opcao == '2':
+                valor = float(input("Valor para saque: R$ "))
+                print(sacar(conta, valor, tipo)[1])
+            elif opcao == '3':
+                ver_extrato(conta, tipo)
+            elif opcao == '4':
+                emprestimo(conta, tipo)
+            elif opcao == '5':
+                break
+            elif opcao == '0':
+                print("Saindo...")
+                return
+            else:
+                print("Opção inválida!")
+
+# Iniciar sistema
+menu()
