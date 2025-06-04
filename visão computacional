@@ -1,0 +1,142 @@
+import cv2
+import time
+import threading
+import pyautogui
+import json
+import tkinter as tk
+from PIL import Image, ImageTk
+
+class MonitorBaiaApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Monitoramento da Baia")
+
+        # Área da baia (x, y, largura, altura)
+        self.baia_area = (100, 100, 300, 300)
+        self.tempo_monitoramento = 10  # segundos
+
+        # Flags e variáveis
+        self.monitorando = False
+        self.objeto_na_baia = False
+        self.cap = None
+        self.fgbg = None
+
+        # Widgets Tkinter
+        self.label_video = tk.Label(root)
+        self.label_video.pack()
+
+        self.status_var = tk.StringVar()
+        self.status_var.set("Status: Inativo")
+        self.label_status = tk.Label(root, textvariable=self.status_var, font=("Arial", 14))
+        self.label_status.pack(pady=10)
+
+        self.botao = tk.Button(root, text="Iniciar Monitoramento", command=self.toggle_monitoramento)
+        self.botao.pack(pady=10)
+
+    def toggle_monitoramento(self):
+        if self.monitorando:
+            self.monitorando = False
+            self.status_var.set("Status: Parado pelo usuário")
+            self.botao.config(text="Iniciar Monitoramento")
+            if self.cap:
+                self.cap.release()
+            self.label_video.config(image='')
+        else:
+            self.monitorando = True
+            self.botao.config(text="Parar Monitoramento")
+            self.status_var.set("Status: Monitorando...")
+            threading.Thread(target=self.monitorar_baia, daemon=True).start()
+            self.mostrar_frame()
+
+    def mostrar_frame(self):
+        if not self.monitorando:
+            return
+
+        ret, frame = self.cap.read()
+        if not ret:
+            self.status_var.set("Erro ao capturar vídeo")
+            return
+
+        # Desenha a área da baia
+        x, y, w, h = self.baia_area
+        cv2.rectangle(frame, (x, y), (x + w, y + h), (255, 0, 0), 2)
+
+        # Converte BGR para RGB para mostrar no Tkinter
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        img = Image.fromarray(frame_rgb)
+        imgtk = ImageTk.PhotoImage(image=img)
+
+        self.label_video.imgtk = imgtk
+        self.label_video.configure(image=imgtk)
+
+        # Agenda próxima atualização do frame
+        self.root.after(30, self.mostrar_frame)
+
+    def monitorar_baia(self):
+        self.cap = cv2.VideoCapture(0)
+        self.fgbg = cv2.createBackgroundSubtractorMOG2()
+        inicio = time.time()
+        self.objeto_na_baia = False
+
+        while self.monitorando and (time.time() - inicio < self.tempo_monitoramento):
+            ret, frame = self.cap.read()
+            if not ret:
+                break
+
+            fgmask = self.fgbg.apply(frame)
+            contours, _ = cv2.findContours(fgmask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+            x_baia, y_baia, w_baia, h_baia = self.baia_area
+            objeto_na_baia_local = False
+
+            for cnt in contours:
+                area = cv2.contourArea(cnt)
+                if area > 500:
+                    x, y, w, h = cv2.boundingRect(cnt)
+                    centro = (x + w//2, y + h//2)
+                    if (x_baia < centro[0] < x_baia + w_baia) and (y_baia < centro[1] < y_baia + h_baia):
+                        objeto_na_baia_local = True
+                        break
+
+            if objeto_na_baia_local != self.objeto_na_baia:
+                self.objeto_na_baia = objeto_na_baia_local
+                if self.objeto_na_baia:
+                    self.status_var.set("Status: Finalização detectada - FECHAR")
+                    self.executar_automacao()
+                else:
+                    self.status_var.set("Status: Baia livre")
+
+            time.sleep(0.1)
+
+        self.monitorando = False
+        self.cap.release()
+        self.status_var.set("Status: Monitoramento finalizado")
+        self.botao.config(text="Iniciar Monitoramento")
+        self.label_video.config(image='')
+
+        # Salvar status no arquivo JSON
+        with open("status_baia.json", "w") as f:
+            json.dump({"produto_na_baia": self.objeto_na_baia}, f)
+
+    def executar_automacao(self):
+        print("[AÇÃO] Produto detectado na baia! Executando expedição no SAGA...")
+
+        # Aqui você coloca as ações do pyautogui que deseja executar
+        # Exemplo:
+        pyautogui.hotkey('ctrl', 'v')  # Cola usuário (deve estar no clipboard)
+        time.sleep(0.2)
+        pyautogui.press('tab')         # Vai para senha
+        time.sleep(0.2)
+        pyautogui.typewrite('senha123') # Digita senha (ajuste conforme necessário)
+        time.sleep(0.2)
+        pyautogui.press('tab')         # Próximo campo (confirmação)
+        time.sleep(0.2)
+        pyautogui.press('enter')       # Confirma
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = MonitorBaiaApp(root)
+    root.mainloop()
+    
+    
+    
