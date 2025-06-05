@@ -1,0 +1,266 @@
+import datetime
+
+
+
+class Conta:
+
+    def __init__(self, numero, tipo):
+
+        self.numero = numero
+
+        self.tipo = tipo
+
+        self.saldo = 0.0
+
+        self.extrato = []
+
+        self.saques_hoje = 0
+
+        self.data_hoje = datetime.date.today()
+
+
+
+        self.tarifa_saque = 2.5 if tipo == "corrente" else 0.0
+
+        self.limite_saques = 3 if tipo == "corrente" else 2
+
+
+
+    def atualizar_data(self):
+
+        if self.data_hoje != datetime.date.today():
+
+            self.saques_hoje = 0
+
+            self.data_hoje = datetime.date.today()
+
+
+
+    def registrar_transacao(self, descricao):
+
+        self.extrato.append(f"{datetime.datetime.now().strftime('%d/%m/%Y %H:%M')} - {descricao}")
+
+
+
+    def depositar(self, valor):
+
+        if valor > 0:
+
+            self.saldo += valor
+
+            self.registrar_transacao(f"Depósito: +R$ {valor:.2f}")
+
+            return True, "Depósito realizado com sucesso."
+
+        return False, "Valor inválido para depósito."
+
+
+
+    def sacar(self, valor):
+
+        self.atualizar_data()
+
+        if self.saques_hoje >= self.limite_saques:
+
+            return False, "Limite diário de saques atingido."
+
+        if valor + self.tarifa_saque > self.saldo:
+
+            return False, "Saldo insuficiente."
+
+        if valor <= 0:
+
+            return False, "Valor inválido."
+
+
+
+        self.saldo -= (valor + self.tarifa_saque)
+
+        self.saques_hoje += 1
+
+        self.registrar_transacao(f"Saque: -R$ {valor:.2f} (Tarifa R$ {self.tarifa_saque:.2f})")
+
+        return True, "Saque realizado com sucesso."
+
+
+
+    def emprestimo(self, valor):
+
+        limite = self.saldo * 2
+
+        if 0 < valor <= limite:
+
+            juros = valor * 0.1
+
+            self.saldo += valor
+
+            self.registrar_transacao(f"Empréstimo: +R$ {valor:.2f} (Juros: R$ {juros:.2f})")
+
+            return True, f"Empréstimo aprovado de R$ {valor:.2f} com juros de R$ {juros:.2f}"
+
+        return False, "Valor fora do limite permitido."
+
+
+
+    def ver_extrato(self):
+
+        print(f"\n=== EXTRATO - CONTA {self.tipo.upper()} #{self.numero} ===")
+
+        if not self.extrato:
+
+            print("Nenhuma movimentação.")
+
+        else:
+
+            for linha in self.extrato:
+
+                print(linha)
+
+        print(f"Saldo atual: R$ {self.saldo:.2f}")
+
+        print("======================================\n")
+
+
+
+class Cliente:
+
+    def __init__(self, nome, cpf):
+
+        self.nome = nome
+
+        self.cpf = cpf
+
+        self.contas = []
+
+
+
+    def adicionar_conta(self, conta: Conta):
+
+        self.contas.append(conta)
+
+
+
+    def listar_contas(self):
+
+        print(f"\nContas de {self.nome}:")
+
+        for i, conta in enumerate(self.contas):
+
+            print(f"{i+1} - {conta.tipo.upper()} #{conta.numero} (Saldo: R$ {conta.saldo:.2f})")
+
+
+
+def menu():
+
+    print("=== Bem-vindo ao Banco Python ===")
+
+    nome = input("Informe seu nome: ")
+
+    cpf = input("Informe seu CPF: ")
+
+    cliente = Cliente(nome, cpf)
+
+
+
+    # Adicionar duas contas por padrão
+
+    cliente.adicionar_conta(Conta(1, "corrente"))
+
+    cliente.adicionar_conta(Conta(2, "poupanca"))
+
+
+
+    while True:
+
+        print(f"\n=== CLIENTE: {cliente.nome} ===")
+
+        cliente.listar_contas()
+
+        escolha = input("Escolha o número da conta (ou 0 para sair): ")
+
+
+
+        if escolha == '0':
+
+            print("Obrigado por usar o Banco Python!")
+
+            break
+
+
+
+        try:
+
+            conta = cliente.contas[int(escolha) - 1]
+
+        except (IndexError, ValueError):
+
+            print("Conta inválida.")
+
+            continue
+
+
+
+        while True:
+
+            print(f"\n--- Menu Conta {conta.tipo.upper()} #{conta.numero} ---")
+
+            print("1 - Depositar")
+
+            print("2 - Sacar")
+
+            print("3 - Ver Extrato")
+
+            print("4 - Solicitar Empréstimo")
+
+            print("5 - Trocar Conta")
+
+            print("0 - Sair")
+
+            opcao = input("Escolha: ")
+
+
+
+            if opcao == '1':
+
+                valor = float(input("Valor para depósito: R$ "))
+
+                print(conta.depositar(valor)[1])
+
+            elif opcao == '2':
+
+                valor = float(input("Valor para saque: R$ "))
+
+                print(conta.sacar(valor)[1])
+
+            elif opcao == '3':
+
+                conta.ver_extrato()
+
+            elif opcao == '4':
+
+                valor = float(input("Valor do empréstimo: R$ "))
+
+                print(conta.emprestimo(valor)[1])
+
+            elif opcao == '5':
+
+                break
+
+            elif opcao == '0':
+
+                print("Encerrando o sistema.")
+
+                return
+
+            else:
+
+                print("Opção inválida!")
+
+
+
+# Inicia o sistema
+
+menu()
+
+
+
