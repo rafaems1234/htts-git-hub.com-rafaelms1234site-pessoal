@@ -1,0 +1,189 @@
+├── app/
+│   ├── main.py
+│   ├── database.py
+│   ├── models.py
+│   ├── crud.py
+│   └── routes.py
+├── tests/
+│   └── test_users.py
+├── requirements.txt
+└── README.md
+1. requirements.txt
+txt
+Copiar
+Editar
+fastapi
+uvicorn[standard]
+motor
+pydantic
+pytest
+httpx
+2. Código dos arquivos principais
+Vou mandar cada arquivo abaixo para você copiar.
+
+app/database.py
+python
+Copiar
+Editar
+from motor.motor_asyncio import AsyncIOMotorClient
+
+MONGO_DETAILS = "mongodb://localhost:27017"
+
+client = AsyncIOMotorClient(MONGO_DETAILS)
+database = client.tdd_fastapi_db
+user_collection = database.get_collection("users")
+app/models.py
+python
+Copiar
+Editar
+from pydantic import BaseModel, EmailStr, Field
+from typing import Optional
+from bson import ObjectId
+
+class PyObjectId(ObjectId):
+    @classmethod
+    def __get_validators__(cls):
+        yield cls.validate
+    
+    @classmethod
+    def validate(cls, v):
+        if not ObjectId.is_valid(v):
+            raise ValueError("Invalid objectid")
+        return ObjectId(v)
+    
+    @classmethod
+    def __modify_schema__(cls, field_schema):
+        field_schema.update(type="string")
+
+class UserModel(BaseModel):
+    id: Optional[PyObjectId] = Field(alias="_id")
+    name: str
+    email: EmailStr
+    age: Optional[int]
+
+    class Config:
+        allow_population_by_field_name = True
+        arbitrary_types_allowed = True
+        json_encoders = {ObjectId: str}
+app/crud.py
+python
+Copiar
+Editar
+from app.database import user_collection
+from app.models import UserModel
+from bson import ObjectId
+
+async def create_user(user_data: dict) -> UserModel:
+    user = await user_collection.insert_one(user_data)
+    new_user = await user_collection.find_one({"_id": user.inserted_id})
+    return UserModel(**new_user)
+
+async def retrieve_user(id: str) -> UserModel:
+    user = await user_collection.find_one({"_id": ObjectId(id)})
+    if user:
+        return UserModel(**user)
+
+async def list_users():
+    users = []
+    async for user in user_collection.find():
+        users.append(UserModel(**user))
+    return users
+
+async def update_user(id: str, data: dict):
+    await user_collection.update_one({"_id": ObjectId(id)}, {"$set": data})
+    updated_user = await user_collection.find_one({"_id": ObjectId(id)})
+    return UserModel(**updated_user)
+
+async def delete_user(id: str):
+    await user_collection.delete_one({"_id": ObjectId(id)})
+app/routes.py
+python
+Copiar
+Editar
+from fastapi import APIRouter, HTTPException
+from typing import List
+from app.models import UserModel
+from app.crud import create_user, retrieve_user, list_users, update_user, delete_user
+
+router = APIRouter(prefix="/users", tags=["Users"])
+
+@router.post("/", response_model=UserModel)
+async def create_user_endpoint(user: UserModel):
+    new_user = await create_user(user.dict(by_alias=True))
+    return new_user
+
+@router.get("/{id}", response_model=UserModel)
+async def get_user(id: str):
+    user = await retrieve_user(id)
+    if user:
+        return user
+    raise HTTPException(status_code=404, detail="User not found")
+
+@router.get("/", response_model=List[UserModel])
+async def get_users():
+    return await list_users()
+
+@router.put("/{id}", response_model=UserModel)
+async def update_user_endpoint(id: str, user: UserModel):
+    updated_user = await update_user(id, user.dict(exclude_unset=True, by_alias=True))
+    return updated_user
+
+@router.delete("/{id}")
+async def delete_user_endpoint(id: str):
+    await delete_user(id)
+    return {"message": "User deleted"}
+app/main.py
+python
+Copiar
+Editar
+from fastapi import FastAPI
+from app.routes import router
+
+app = FastAPI(title="TDD FastAPI with MongoDB")
+
+app.include_router(router)
+3. Testes com Pytest
+tests/test_users.py
+python
+Copiar
+Editar
+import pytest
+from httpx import AsyncClient
+from app.main import app
+
+@pytest.mark.asyncio
+async def test_create_and_get_user():
+    async with AsyncClient(app=app, base_url="http://test") as ac:
+        user_data = {"name": "Rafael", "email": "rafael@example.com", "age": 30}
+        
+        # Cria usuário
+        response = await ac.post("/users/", json=user_data)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["name"] == "Rafael"
+        user_id = data["_id"]
+        
+        # Busca usuário
+        response = await ac.get(f"/users/{user_id}")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["email"] == "rafael@example.com"
+4. Rodar o projeto
+Instale as dependências:
+
+bash
+Copiar
+Editar
+pip install -r requirements.txt
+Rode o servidor:
+
+bash
+Copiar
+Editar
+uvicorn app.main:app --reload
+Rode os testes:
+
+bash
+Copiar
+Editar
+pytest
