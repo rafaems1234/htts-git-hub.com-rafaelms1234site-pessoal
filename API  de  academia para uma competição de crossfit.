@@ -1,0 +1,194 @@
+crossfit_api/
+├── app/
+│   ├── __init__.py
+│   ├── main.py
+│   ├── models/
+│   │   └── models.py
+│   ├── schemas/
+│   │   └── schemas.py
+│   ├── routers/
+│   │   ├── atletas.py
+│   │   ├── equipes.py
+│   │   ├── provas.py
+│   │   └── resultados.py
+│   ├── database.py
+├── requirements.txt
+├── alembic/ (se usar migrations)
+└── README.md
+🔧 1. requirements.txt
+txt
+Copiar
+Editar
+fastapi
+uvicorn[standard]
+asyncpg
+sqlalchemy[asyncio]
+pydantic
+alembic
+⚙️ 2. app/database.py
+python
+Copiar
+Editar
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.orm import sessionmaker, declarative_base
+
+DATABASE_URL = "postgresql+asyncpg://usuario:senha@localhost/crossfit"
+
+engine = create_async_engine(DATABASE_URL, echo=True)
+SessionLocal = sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
+Base = declarative_base()
+📦 3. app/models/models.py
+python
+Copiar
+Editar
+from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime
+from sqlalchemy.orm import relationship
+from app.database import Base
+from datetime import datetime
+
+class Equipe(Base):
+    __tablename__ = "equipes"
+    id = Column(Integer, primary_key=True)
+    nome = Column(String)
+    box = Column(String)
+    tecnico = Column(String)
+    atletas = relationship("Atleta", back_populates="equipe")
+
+class Atleta(Base):
+    __tablename__ = "atletas"
+    id = Column(Integer, primary_key=True)
+    nome = Column(String)
+    idade = Column(Integer)
+    peso = Column(Float)
+    nivel = Column(String)
+    categoria = Column(String)
+    equipe_id = Column(Integer, ForeignKey("equipes.id"))
+    equipe = relationship("Equipe", back_populates="atletas")
+
+class Prova(Base):
+    __tablename__ = "provas"
+    id = Column(Integer, primary_key=True)
+    nome = Column(String)
+    descricao = Column(String)
+    tipo = Column(String)
+    tempo_limite = Column(Integer)
+
+class Resultado(Base):
+    __tablename__ = "resultados"
+    id = Column(Integer, primary_key=True)
+    atleta_id = Column(Integer, ForeignKey("atletas.id"))
+    prova_id = Column(Integer, ForeignKey("provas.id"))
+    pontuacao = Column(Integer)
+    tempo = Column(Float)
+    data = Column(DateTime, default=datetime.utcnow)
+📐 4. app/schemas/schemas.py
+python
+Copiar
+Editar
+from pydantic import BaseModel
+from typing import Optional
+from datetime import datetime
+
+class EquipeBase(BaseModel):
+    nome: str
+    box: str
+    tecnico: str
+
+class EquipeCreate(EquipeBase): pass
+class EquipeOut(EquipeBase):
+    id: int
+    class Config:
+        orm_mode = True
+
+class AtletaBase(BaseModel):
+    nome: str
+    idade: int
+    peso: float
+    nivel: str
+    categoria: str
+    equipe_id: int
+
+class AtletaCreate(AtletaBase): pass
+class AtletaOut(AtletaBase):
+    id: int
+    class Config:
+        orm_mode = True
+
+class ProvaBase(BaseModel):
+    nome: str
+    descricao: str
+    tipo: str
+    tempo_limite: int
+
+class ProvaCreate(ProvaBase): pass
+class ProvaOut(ProvaBase):
+    id: int
+    class Config:
+        orm_mode = True
+
+class ResultadoBase(BaseModel):
+    atleta_id: int
+    prova_id: int
+    pontuacao: int
+    tempo: float
+
+class ResultadoCreate(ResultadoBase): pass
+class ResultadoOut(ResultadoBase):
+    id: int
+    data: datetime
+    class Config:
+        orm_mode = True
+🌐 5. app/routers/atletas.py (exemplo de rota)
+python
+Copiar
+Editar
+from fastapi import APIRouter, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.database import SessionLocal
+from app.models import models
+from app.schemas import schemas
+
+router = APIRouter(prefix="/atletas", tags=["Atletas"])
+
+async def get_db():
+    async with SessionLocal() as session:
+        yield session
+
+@router.post("/", response_model=schemas.AtletaOut)
+async def criar_atleta(atleta: schemas.AtletaCreate, db: AsyncSession = Depends(get_db)):
+    novo = models.Atleta(**atleta.dict())
+    db.add(novo)
+    await db.commit()
+    await db.refresh(novo)
+    return novo
+
+@router.get("/", response_model=list[schemas.AtletaOut])
+async def listar_atletas(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(models.Atleta.__table__.select())
+    return result.scalars().all()
+Repita a lógica para equipes.py, provas.py e resultados.py.
+
+🚀 6. app/main.py
+python
+Copiar
+Editar
+from fastapi import FastAPI
+from app.routers import atletas, equipes, provas, resultados
+from app.database import Base, engine
+
+app = FastAPI(title="CrossFit API")
+
+@app.on_event("startup")
+async def startup():
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+app.include_router(atletas.router)
+app.include_router(equipes.router)
+app.include_router(provas.router)
+app.include_router(resultados.router)
+▶️ 7. Rodar o projeto
+bash
+Copiar
+Editar
+uvicorn app.main:app --reload
